@@ -2,6 +2,7 @@ import telegram
 from telegram.ext import Updater, MessageHandler, CommandHandler, Filters
 
 import sys
+import numpy.random as rn
 
 from Crypto.Cipher import AES
 import base64
@@ -24,12 +25,16 @@ TELLING = 1
 POLLING = 2
 STATE = IDLE
 
+cant_begin_phrases = ['Finish the previous story first',
+                      'For fucks sake, let the other story finish',
+                      'Shut up and let us listen to the previous story']
+
 def begin_callback(bot, update):
     print 'begin'
     global candidate, STATE
     group_id = update.message.chat_id
     if STATE != IDLE:
-        bot.send_message(chat_id=group_id, text='Finish the previous story first')
+        bot.send_message(chat_id=group_id, text=rn.choice(cant_begin_phrases))
     else:
         STATE = TELLING
         users.append(update.effective_user)
