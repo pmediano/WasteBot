@@ -21,7 +21,7 @@ TODO list:
 ENCODED_TOKEN  = 'LTB/7iAGE/OG4isvyJ7Nsr/zJ1kdqWqq2sEYqWPFJB6RF6PU6HURRqQc+oSa7lbF36ZyJSZi+/WrCAG9PQFIZw=='
 votes = {}
 leaderboard = {}
-users = []
+users = {}
 candidate = None
 IDLE = 0
 TELLING = 1
@@ -43,10 +43,10 @@ def begin_callback(bot, update):
         bot.send_message(chat_id=group_id, text=rn.choice(cant_begin_phrases))
     else:
         STATE = TELLING
-        users.append(update.effective_user)
         candidate = update.effective_user
-        sender_name = update.effective_user.first_name
-        bot.send_message(chat_id=update.message.chat_id, text='Everyone shut up and listen to ' + sender_name)
+        sender_name = candidate.first_name
+        users[candidate.id] = sender_name
+        bot.send_message(chat_id=group_id, text='Everyone shut up and listen to ' + sender_name)
 
 
 def end_callback(bot, update):
@@ -87,7 +87,16 @@ def leaderboard_callback(bot, update):
     """
     Print current wasteman leaderboard.
     """
-    bot.send_message(chat_id=update.message.chat_id, text=str(leaderboard))
+    group_id = update.message.chat_id
+    if len(leaderboard) < 1:
+        bot.send_message(chat_id=group_id, text='Empty leaderboard')
+    else:
+        msg = ''
+        for uid in leaderboard:
+            name = users[uid]
+            score = leaderboard[uid]
+            msg += name + ': ' + str(score) + '\n'
+        bot.send_message(chat_id=group_id, text=msg)
 
 
 def check_result(bot, update):
