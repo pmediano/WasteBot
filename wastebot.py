@@ -2,6 +2,7 @@ import telegram
 from telegram.ext import Updater, MessageHandler, CommandHandler, Filters
 
 import sys
+import pickle
 import numpy.random as rn
 
 from Crypto.Cipher import AES
@@ -9,7 +10,6 @@ import base64
 
 """
 TODO list:
-    - Implement persistent leaderboard
     - Do not count other bots when calculating quorum
     - Ensassiment
         * Randomised responses
@@ -20,8 +20,6 @@ TODO list:
 
 ENCODED_TOKEN  = 'LTB/7iAGE/OG4isvyJ7Nsr/zJ1kdqWqq2sEYqWPFJB6RF6PU6HURRqQc+oSa7lbF36ZyJSZi+/WrCAG9PQFIZw=='
 votes = {}
-leaderboard = {}
-users = {}
 candidate = None
 IDLE = 0
 TELLING = 1
@@ -32,6 +30,66 @@ cant_begin_phrases = ['Finish the previous story first',
                       'For fucks sake, let the other story finish',
                       'Shut up and let us listen to the previous story']
 
+#--------------------------------------------------------------#
+#                          UTILS                               #
+#--------------------------------------------------------------#
+def load_leaderboard():
+    try:
+        with open('leaderboard.pkl', 'r') as f:
+            leaderboard, users = pickle.load(f)
+    except:
+        leaderboard = {}
+        users = {}
+    return leaderboard, users
+
+
+def save_leaderboard(leaderboard, users):
+    with open('leaderboard.pkl', 'w') as f:
+        pickle.dump((leaderboard, users), f)
+
+
+def check_result(bot, update):
+    """
+    Check whether current poll reached quorum and can be ended.
+    """
+    waste_votes = len(filter(lambda x: x > 0, votes.values()))
+    nah_votes = len(filter(lambda x: x < 0, votes.values()))
+    # Do not count the bot or the poster himself
+    # TODO: would be better to not count any bots
+    group_id = update.message.chat_id
+    nb_group_members = bot.get_chat_members_count(group_id) - 2
+    quorum = int(nb_group_members/2) + 1
+    ## FIXME: for testing purposes only
+    quorum = 1
+    if waste_votes >= quorum:
+        finish_poll(bot, update, True)
+    if nah_votes >= quorum:
+        finish_poll(bot, update, False)
+
+
+def finish_poll(bot, update, is_waste):
+    """
+    End current poll and update leaderboard.
+    """
+    global votes, STATE
+    STATE = IDLE
+    votes = {}
+    if is_waste:
+        bot.send_message(chat_id=update.message.chat_id, text='You are waste')
+        leaderboard, users = load_leaderboard()
+        if candidate.id in leaderboard:
+            leaderboard[candidate.id] += 1
+        else:
+            leaderboard[candidate.id] = 1
+        with open('leaderboard.pkl', 'w') as f:
+            pickle.dump((leaderboard, users), f)
+    else:
+        bot.send_message(chat_id=update.message.chat_id, text='Not waste enough. Try again next time.')
+
+
+#--------------------------------------------------------------#
+#                       CALLBACKS                              #
+#--------------------------------------------------------------#
 def begin_callback(bot, update):
     """
     Start telling a story and make the storyteller a wasteman candidate.
@@ -85,8 +143,9 @@ def vote_callback(bot, update, vote):
 
 def leaderboard_callback(bot, update):
     """
-    Print current wasteman leaderboard.
+    Load from file and print current wasteman leaderboard.
     """
+    leaderboard, users = load_leaderboard()
     group_id = update.message.chat_id
     if len(leaderboard) < 1:
         bot.send_message(chat_id=group_id, text='Empty leaderboard')
@@ -97,40 +156,6 @@ def leaderboard_callback(bot, update):
             score = leaderboard[uid]
             msg += name + ': ' + str(score) + '\n'
         bot.send_message(chat_id=group_id, text=msg)
-
-
-def check_result(bot, update):
-    """
-    Check whether current poll reached quorum and can be ended.
-    """
-    waste_votes = len(filter(lambda x: x > 0, votes.values()))
-    nah_votes = len(filter(lambda x: x < 0, votes.values()))
-    # Do not count the bot or the poster himself
-    # TODO: would be better to not count any bots
-    group_id = update.message.chat_id
-    nb_group_members = bot.get_chat_members_count(group_id) - 2
-    quorum = int(nb_group_members/2) + 1
-    if waste_votes >= quorum:
-        finish_poll(bot, update, True)
-    if nah_votes >= quorum:
-        finish_poll(bot, update, False)
-
-
-def finish_poll(bot, update, is_waste):
-    """
-    End current poll and update leaderboard.
-    """
-    global votes, STATE
-    STATE = IDLE
-    votes = {}
-    if is_waste:
-        bot.send_message(chat_id=update.message.chat_id, text='You are waste')
-        if candidate.id in leaderboard:
-            leaderboard[candidate.id] += 1
-        else:
-            leaderboard[candidate.id] = 1
-    else:
-        bot.send_message(chat_id=update.message.chat_id, text='Not waste enough. Try again next time.')
 
 
 def votequery_callback(bot, update):
@@ -151,7 +176,7 @@ def votequery_callback(bot, update):
 
 def unknown(bot, update):
     """
-    Reply to an unknown command.
+    Default reply to an unknown command.
     """
     bot.send_message(chat_id=update.message.chat_id, text='Wtf u talking about?')
 
