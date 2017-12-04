@@ -72,6 +72,7 @@ def check_result(bot, update):
     group_id = update.message.chat_id
     nb_group_members = bot.get_chat_members_count(group_id) - 2
     quorum = int(nb_group_members/2) + 1
+    quorum = 1
     if waste_votes >= quorum:
         finish_poll(bot, update, True)
     if nah_votes >= quorum:
@@ -146,7 +147,7 @@ def vote_callback(bot, update, vote):
     sender = update.effective_user.id
     sender_name = update.effective_user.first_name
     if STATE != POLLING:
-        bot.send_message(chat_id=update.message.chat_id, text=sender_name + ' is stoopid and thinks he can vote whenever he wants')
+        bot.send_message(chat_id=update.message.chat_id, text=sender_name + ', you\'re stoopid and you think you can vote whenever you want')
     elif sender == candidate.id:
         bot.send_message(chat_id=update.message.chat_id, text='Voting on your own story, you cheeky cunt')
     else:
