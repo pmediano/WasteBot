@@ -12,6 +12,8 @@ import base64
 TODO list:
     - Do not count other bots when calculating quorum
     - Store media with wasteman stories
+    - Squash messages when telling story
+    - Print list of stories and enumerate them for easier UI
     - Ensassiment
         * Randomised responses
         * Stickerrrrrs
@@ -209,10 +211,12 @@ def story_callback(bot, update, args):
     with open(story_name + '.pkl', 'r') as f:
         log = pickle.load(f)
 
+    # FIXME: apparently Telegram doesn't allow bots to send too many messages at once,
+    # so we need to squash them into one
     for msg in log:
         sender = msg.from_user.first_name
         txt = msg.text
-        bot.send_message(chat_id=group_id, text='*' + sender + '*: ' + txt, parse_mode=telegram.ParseMode.MARKDOWN)
+        bot.send_message(chat_id=group_id, text='*' + sender + '*:\n' + txt, parse_mode=telegram.ParseMode.MARKDOWN)
 
 
 class StoryFilter(BaseFilter):
