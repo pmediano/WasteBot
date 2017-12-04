@@ -2,6 +2,7 @@ import telegram
 from telegram.ext import Updater, MessageHandler, CommandHandler, Filters, BaseFilter
 
 import sys
+from glob import glob
 import pickle
 import numpy.random as rn
 import logging
@@ -13,8 +14,6 @@ import base64
 TODO list:
     - Do not count other bots when calculating quorum
     - Store media with wasteman stories
-    - Squash messages when telling story
-    - Print list of stories and enumerate them for easier UI
     - Ensassiment
         * Randomised responses
         * Stickerrrrrs
@@ -31,6 +30,7 @@ waste - Approve story's wastemanship
 nah - Story wasn't that great
 votes - Get current vote count
 leaderboard - Print wasteman leaderboard
+story - Tell me a truly wasteful story
 """
 
 ENCODED_TOKEN  = 'LTB/7iAGE/OG4isvyJ7Nsr/zJ1kdqWqq2sEYqWPFJB6RF6PU6HURRqQc+oSa7lbF36ZyJSZi+/WrCAG9PQFIZw=='
@@ -80,7 +80,6 @@ def check_result(bot, update):
     group_id = update.message.chat_id
     nb_group_members = bot.get_chat_members_count(group_id) - 2
     quorum = int(nb_group_members/2) + 1
-    quorum = 1
     if waste_votes >= quorum:
         finish_poll(bot, update, True)
     if nah_votes >= quorum:
@@ -104,7 +103,7 @@ def finish_poll(bot, update, is_waste):
             users[candidate.id] = candidate.first_name
         with open('leaderboard.pkl', 'w') as f:
             pickle.dump((leaderboard, users), f)
-        with open(candidate.first_name + str(leaderboard[candidate.id]) + '.pkl', 'w') as f:
+        with open('stories/' + candidate.first_name + str(leaderboard[candidate.id]) + '.pkl', 'w') as f:
             pickle.dump(storylog, f)
     else:
         bot.send_message(chat_id=update.message.chat_id, text='Not waste enough. Try again next time.')
@@ -210,19 +209,28 @@ def log_callback(bot, update):
 
 def story_callback(bot, update, args):
     group_id = update.message.chat_id
-    if len(args) != 1:
+
+    if len(args) > 1:
         bot.send_message(chat_id=group_id, text='Send me exactly one story name')
 
-    story_name = args[0]
-    with open(story_name + '.pkl', 'r') as f:
-        log = pickle.load(f)
+    elif len(args) == 0:
+        all_stories = glob('stories/*pkl')
+        msg = 'Available stories:\n'
+        for i,n in enumerate(all_stories):
+            msg += str(i) + ': ' + n.split('/')[1][:-4] + '\n'
+        bot.send_message(chat_id=group_id, text=msg)
 
-    # FIXME: apparently Telegram doesn't allow bots to send too many messages at once,
-    # so we need to squash them into one
-    for msg in log:
-        sender = msg.from_user.first_name
-        txt = msg.text
-        bot.send_message(chat_id=group_id, text='*' + sender + '*:\n' + txt, parse_mode=telegram.ParseMode.MARKDOWN)
+    elif len(args) == 1:
+        story_name = args[0]
+        with open('stories/' + story_name + '.pkl', 'r') as f:
+            log = pickle.load(f)
+
+        msg = ''
+        for m in log:
+            sender = m.from_user.first_name
+            txt = m.text
+            msg += '*' + sender + '*:\n' + txt + '\n\n'
+        bot.send_message(chat_id=group_id, text=msg, parse_mode=telegram.ParseMode.MARKDOWN)
 
 
 class StoryFilter(BaseFilter):
@@ -267,8 +275,8 @@ def main():
     leaderboard_handler = CommandHandler('leaderboard', leaderboard_callback)
     dispatcher.add_handler(leaderboard_handler)
 
-    tell_handler = CommandHandler('tell_story', story_callback, pass_args=True)
-    dispatcher.add_handler(tell_handler)
+    story_handler = CommandHandler('story', story_callback, pass_args=True)
+    dispatcher.add_handler(story_handler)
 
     dispatcher.add_handler(MessageHandler(Filters.command, unknown))
 
