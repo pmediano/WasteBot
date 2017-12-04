@@ -1,5 +1,5 @@
 import telegram
-from telegram.ext import Updater, MessageHandler, CommandHandler, Filters
+from telegram.ext import Updater, MessageHandler, CommandHandler, Filters, BaseFilter
 
 import sys
 import pickle
@@ -11,6 +11,7 @@ import base64
 """
 TODO list:
     - Do not count other bots when calculating quorum
+    - Store media with wasteman stories
     - Ensassiment
         * Randomised responses
         * Stickerrrrrs
@@ -32,6 +33,7 @@ leaderboard - Print wasteman leaderboard
 ENCODED_TOKEN  = 'LTB/7iAGE/OG4isvyJ7Nsr/zJ1kdqWqq2sEYqWPFJB6RF6PU6HURRqQc+oSa7lbF36ZyJSZi+/WrCAG9PQFIZw=='
 votes = {}
 candidate = None
+storylog = []
 IDLE = 0
 TELLING = 1
 POLLING = 2
@@ -70,8 +72,6 @@ def check_result(bot, update):
     group_id = update.message.chat_id
     nb_group_members = bot.get_chat_members_count(group_id) - 2
     quorum = int(nb_group_members/2) + 1
-    ## FIXME: for testing purposes only
-    quorum = 1
     if waste_votes >= quorum:
         finish_poll(bot, update, True)
     if nah_votes >= quorum:
@@ -92,8 +92,11 @@ def finish_poll(bot, update, is_waste):
             leaderboard[candidate.id] += 1
         else:
             leaderboard[candidate.id] = 1
+            users[candidate.id] = candidate.first_name
         with open('leaderboard.pkl', 'w') as f:
             pickle.dump((leaderboard, users), f)
+        with open(candidate.first_name + str(leaderboard[candidate.id]) + '.pkl', 'w') as f:
+            pickle.dump(storylog, f)
     else:
         bot.send_message(chat_id=update.message.chat_id, text='Not waste enough. Try again next time.')
 
@@ -106,7 +109,7 @@ def begin_callback(bot, update):
     Start telling a story and make the storyteller a wasteman candidate.
     Does nothing if STATE != IDLE.
     """
-    global candidate, STATE
+    global candidate, STATE, storylog
     group_id = update.message.chat_id
     if STATE != IDLE:
         bot.send_message(chat_id=group_id, text=rn.choice(cant_begin_phrases))
@@ -114,7 +117,7 @@ def begin_callback(bot, update):
         STATE = TELLING
         candidate = update.effective_user
         sender_name = candidate.first_name
-        users[candidate.id] = sender_name
+        storylog = []
         bot.send_message(chat_id=group_id, text='Everyone shut up and listen to ' + sender_name)
 
 
@@ -192,6 +195,30 @@ def unknown(bot, update):
     bot.send_message(chat_id=update.message.chat_id, text='Wtf u talking about?')
 
 
+def log_callback(bot, update):
+    storylog.append(update.message)
+
+
+def story_callback(bot, update, args):
+    group_id = update.message.chat_id
+    if len(args) != 1:
+        bot.send_message(chat_id=group_id, text='Send me exactly one story name')
+
+    story_name = args[0]
+    with open(story_name + '.pkl', 'r') as f:
+        log = pickle.load(f)
+
+    for msg in log:
+        sender = msg.from_user.first_name
+        txt = msg.text
+        bot.send_message(chat_id=group_id, text='*' + sender + '*: ' + txt, parse_mode=telegram.ParseMode.MARKDOWN)
+
+
+class StoryFilter(BaseFilter):
+    def filter(self, message):
+        return STATE == TELLING
+
+
 def main():
 
     args = sys.argv
@@ -229,7 +256,13 @@ def main():
     leaderboard_handler = CommandHandler('leaderboard', leaderboard_callback)
     dispatcher.add_handler(leaderboard_handler)
 
+    tell_handler = CommandHandler('tell_story', story_callback, pass_args=True)
+    dispatcher.add_handler(tell_handler)
+
     dispatcher.add_handler(MessageHandler(Filters.command, unknown))
+
+    log_handler = MessageHandler(StoryFilter() & Filters.text, log_callback)
+    dispatcher.add_handler(log_handler)
 
     updater.start_polling(timeout=1)
 
