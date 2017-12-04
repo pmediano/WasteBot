@@ -18,6 +18,17 @@ TODO list:
 
 """
 
+"""
+Command names and descriptions, as sent to the Botfather
+
+beginwaste - Start telling waste story
+endwaste - Finish telling waste story
+waste - Approve story's wastemanship
+nah - Story wasn't that great
+votes - Get current vote count
+leaderboard - Print wasteman leaderboard
+"""
+
 ENCODED_TOKEN  = 'LTB/7iAGE/OG4isvyJ7Nsr/zJ1kdqWqq2sEYqWPFJB6RF6PU6HURRqQc+oSa7lbF36ZyJSZi+/WrCAG9PQFIZw=='
 votes = {}
 candidate = None
