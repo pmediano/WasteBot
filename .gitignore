@@ -104,3 +104,6 @@ ENV/
 *.swp
 *.swo
 
+# Ignore saved pickle files
+*.pkl
+
