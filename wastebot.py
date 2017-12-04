@@ -4,6 +4,7 @@ from telegram.ext import Updater, MessageHandler, CommandHandler, Filters, BaseF
 import sys
 import pickle
 import numpy.random as rn
+import logging
 
 from Crypto.Cipher import AES
 import base64
@@ -44,6 +45,11 @@ STATE = IDLE
 cant_begin_phrases = ['Finish the previous story first',
                       'For fucks sake, let the other story finish',
                       'Shut up and let us listen to the previous story']
+
+
+logging.basicConfig(
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        level=logging.INFO)
 
 #--------------------------------------------------------------#
 #                          UTILS                               #
