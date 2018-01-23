@@ -6,6 +6,7 @@ from glob import glob
 import pickle
 import numpy.random as rn
 import logging
+import datetime
 
 from Crypto.Cipher import AES
 import base64
@@ -24,32 +25,51 @@ TODO list:
 """
 Command names and descriptions, as sent to the Botfather
 
-beginwaste - Start telling waste story
-endwaste - Finish telling waste story
-waste - Approve story's wastemanship
-nah - Story wasn't that great
-votes - Get current vote count
+beginwaste  - Start telling waste story
+endwaste    - Finish telling waste story
+waste       - Approve story's wastemanship
+nah         - Story wasn't that great
+votes       - Get current vote count
 leaderboard - Print wasteman leaderboard
-story - Tell me a truly wasteful story
+story       - Tell me a truly wasteful story
+extend      - Allow people to vote for another day
+
 """
 
-ENCODED_TOKEN  = 'LTB/7iAGE/OG4isvyJ7Nsr/zJ1kdqWqq2sEYqWPFJB6RF6PU6HURRqQc+oSa7lbF36ZyJSZi+/WrCAG9PQFIZw=='
-votes = {}
-candidate = None
-storylog = []
-IDLE = 0
-TELLING = 1
-POLLING = 2
-STATE = IDLE
-
-cant_begin_phrases = ['Finish the previous story first',
-                      'For fucks sake, let the other story finish',
-                      'Shut up and let us listen to the previous story']
-
+ENCODED_TOKEN = 'LTB/7iAGE/OG4isvyJ7Nsr/zJ1kdqWqq2sEYqWPFJB6RF6PU6HURRqQc+oSa7lbF36ZyJSZi+/WrCAG9PQFIZw=='
+votes         = {}
+candidate     = None
+storylog      = []
+IDLE          = 0
+TELLING       = 1
+POLLING       = 2
+STATE         = IDLE
 
 logging.basicConfig(
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         level=logging.INFO)
+
+
+#--------------------------------------------------------------#
+#                       CHATTINESS                             #
+#--------------------------------------------------------------#
+max_days_init       = 2
+max_extensions      = 3
+
+cant_begin_phrases  = [ 'Finish the previous story first',
+                        'For fucks sake, let the other story finish',
+                        'Shut up and let us listen to the previous story']
+
+ext_allowed_phrases = [ 'Because you\'ve asked me nicely, you get more time to vote. Use \extend',
+                        'Only if politicians had your luck! Use \extend to get one more day at the polls',
+                        'You\'ve opened Pandora\'s box. I hope you\'re proud. Use \extend' ]
+
+ext_denied_phrases  = [ 'You cheeky cunt, you want even more time to vote!? Extension denied.',
+                        'You\'re as undecided as a third world country government. Extension denied.' ]
+
+ext_allowed_confirm =   'You have one more day to vote for this story.'
+ext_denied_confirm  =   'Your request is DENIED.'
+
 
 #--------------------------------------------------------------#
 #                          UTILS                               #
@@ -73,6 +93,8 @@ def check_result(bot, update):
     """
     Check whether current poll reached quorum and can be ended.
     """
+    global extensions_allowed
+
     waste_votes = len(filter(lambda x: x > 0, votes.values()))
     nah_votes = len(filter(lambda x: x < 0, votes.values()))
     # Do not count the bot or the poster himself
@@ -82,8 +104,13 @@ def check_result(bot, update):
     quorum = int(nb_group_members/2) + 1
     if waste_votes >= quorum:
         finish_poll(bot, update, True)
-    if nah_votes >= quorum:
+    elif nah_votes >= quorum:
         finish_poll(bot, update, False)
+    elif check_expiry():
+        if (extensions_allowed < max_extensions):
+            bot.send_message(chat_id=group_id, text=rn.choice(ext_allowed_phrases))
+        else:
+            bot.send_message(chat_id=group_id, text=rn.choice(ext_denied_phrases))
 
 
 def finish_poll(bot, update, is_waste):
@@ -109,23 +136,36 @@ def finish_poll(bot, update, is_waste):
         bot.send_message(chat_id=update.message.chat_id, text='Not waste enough. Try again next time.')
 
 
+def check_expiry():
+    """
+    Check whether current poll has become stale
+    """
+    global start_time, max_days
+    now_time = datetime.datetime.now()
+    day_diff = (now_time - start_time).days
+    return (day_diff > max_days)
+
+
 #--------------------------------------------------------------#
 #                       CALLBACKS                              #
 #--------------------------------------------------------------#
 def begin_callback(bot, update):
     """
     Start telling a story and make the storyteller a wasteman candidate.
+    Also log the date and time for supporting extensions.
     Does nothing if STATE != IDLE.
     """
-    global candidate, STATE, storylog
+    global candidate, STATE, storylog, start_time, max_days
     group_id = update.message.chat_id
     if STATE != IDLE:
         bot.send_message(chat_id=group_id, text=rn.choice(cant_begin_phrases))
     else:
-        STATE = TELLING
-        candidate = update.effective_user
+        STATE       = TELLING
+        candidate   = update.effective_user
+        start_time  = datetime.datetime.now()
+        max_days    = max_days_init
         sender_name = candidate.first_name
-        storylog = []
+        storylog    = []
         bot.send_message(chat_id=group_id, text='Everyone shut up and listen to ' + sender_name)
 
 
@@ -233,6 +273,21 @@ def story_callback(bot, update, args):
         bot.send_message(chat_id=group_id, text=msg, parse_mode=telegram.ParseMode.MARKDOWN)
 
 
+def extend_callback(bot, update):
+    """
+    Allow the quorum time to be extended by a day, but only 3 times
+    """
+    global extensions_requested, max_days
+
+    group_id = update.message.chat_id
+    if (extensions_requested < max_extensions):
+        extensions_requested += 1
+        max_days += 1
+        bot.send_message(chat_id=group_id, text=ext_allowed_confirm)
+    else:
+        bot.send_message(chat_id=group_id, text=ext_denied_confirm)
+
+
 class StoryFilter(BaseFilter):
     def filter(self, message):
         return STATE == TELLING
@@ -277,6 +332,9 @@ def main():
 
     story_handler = CommandHandler('story', story_callback, pass_args=True)
     dispatcher.add_handler(story_handler)
+
+    extend_handler = CommandHandler('extend', extend_callback, pass_args=True)
+    dispatcher.add_handler(extend_handler)
 
     dispatcher.add_handler(MessageHandler(Filters.command, unknown))
 
