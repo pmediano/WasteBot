@@ -111,7 +111,10 @@ def check_result(bot, update):
             bot.send_message(chat_id=group_id, text=rn.choice(ext_allowed_phrases))
         else:
             bot.send_message(chat_id=group_id, text=rn.choice(ext_denied_phrases))
-
+            if (waste_votes > nah_votes):
+                finish_poll(bot, update, True)
+            else:
+                finish_poll(bot, update, False)
 
 def finish_poll(bot, update, is_waste):
     """
